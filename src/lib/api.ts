@@ -6,38 +6,68 @@ if (!configuredApiBase) {
 
 const API_BASE = configuredApiBase.replace(/\/$/, '');
 
-function getCookie(name: string): string | null {
-  const prefix = `${encodeURIComponent(name)}=`;
-  const item = document.cookie.split('; ').find(v => v.startsWith(prefix));
-  return item ? decodeURIComponent(item.slice(prefix.length)) : null;
+let csrfToken: string | null = null;
+
+function rememberCsrfToken(value: unknown) {
+  if (typeof value === 'string' && value.length >= 16) csrfToken = value;
+}
+
+async function loadCsrfToken(): Promise<string> {
+  if (csrfToken) return csrfToken;
+
+  const res = await fetch(`${API_BASE}/api/v1/auth/csrf`, {
+    method: 'GET',
+    credentials: 'include'
+  });
+  const payload = await res.json().catch(() => null) as any;
+  if (!res.ok) throw new Error(payload?.error?.message ?? 'Unable to verify this request. Please sign in again.');
+
+  rememberCsrfToken(payload?.data?.csrfToken);
+  if (!csrfToken) throw new Error('Unable to verify this request. Please sign in again.');
+  return csrfToken;
+}
+
+async function refreshWebSession(): Promise<boolean> {
+  const refreshed = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include'
+  });
+  const payload = await refreshed.json().catch(() => null) as any;
+  if (!refreshed.ok) return false;
+  rememberCsrfToken(payload?.data?.csrfToken);
+  return true;
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
   const method = (init.method ?? 'GET').toUpperCase();
   const headers = new Headers(init.headers);
   if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-    const csrf = getCookie('csrf_token');
-    if (csrf) headers.set('X-CSRF-Token', csrf);
-  }
+
+  const needsCsrf = !['GET', 'HEAD', 'OPTIONS'].includes(method) && path.startsWith('/api/v1/admin/');
+  if (needsCsrf) headers.set('X-CSRF-Token', await loadCsrfToken());
 
   const res = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: 'include' });
   if (res.status === 401 && retry && !path.includes('/auth/refresh') && !path.includes('/auth/login')) {
-    const refreshed = await fetch(`${API_BASE}/api/v1/auth/refresh`, { method: 'POST', credentials: 'include' });
-    if (refreshed.ok) return request<T>(path, init, false);
+    const refreshed = await refreshWebSession();
+    if (refreshed) return request<T>(path, init, false);
   }
 
   const payload = await res.json().catch(() => null) as any;
   if (!res.ok) throw new Error(payload?.error?.message ?? `Request failed (${res.status})`);
+  rememberCsrfToken(payload?.data?.csrfToken);
   return payload.data as T;
 }
 
 export const api = {
-  login: (login: string, password: string) => request<{ user: any; forcePasswordChange: boolean }>('/api/v1/auth/login', {
+  login: (login: string, password: string) => request<{ user: any; forcePasswordChange: boolean; csrfToken?: string }>('/api/v1/auth/login', {
     method: 'POST', body: JSON.stringify({ login, password, client: 'web' })
   }),
   me: () => request<{ user: any }>('/api/v1/auth/me'),
-  logout: () => request<{ loggedOut: boolean }>('/api/v1/auth/logout', { method: 'POST', body: '{}' }),
+  logout: async () => {
+    const result = await request<{ loggedOut: boolean }>('/api/v1/auth/logout', { method: 'POST', body: '{}' });
+    csrfToken = null;
+    return result;
+  },
   dashboard: () => request<any>('/api/v1/admin/dashboard'),
   users: (q = '') => request<any>(`/api/v1/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   user: (id: string) => request<any>(`/api/v1/admin/users/${encodeURIComponent(id)}`),
