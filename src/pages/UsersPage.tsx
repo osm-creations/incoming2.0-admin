@@ -23,14 +23,37 @@ export default function UsersPage() {
 function CreateUser({ onClose }: { onClose(): void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({ publicUserId: '', email: '', password: '', role: 'MAGICIAN' });
-  const mutation = useMutation({ mutationFn: () => api.createUser({ ...form, publicUserId: form.publicUserId || undefined }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); onClose(); } });
-  function submit(e: FormEvent) { e.preventDefault(); mutation.mutate(); }
+  const [clientError, setClientError] = useState('');
+  const mutation = useMutation({
+    mutationFn: () => api.createUser({
+      publicUserId: form.publicUserId.trim() || undefined,
+      email: form.email.trim(),
+      password: form.password,
+      role: form.role
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); onClose(); }
+  });
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    setClientError('');
+    const publicUserId = form.publicUserId.trim();
+    if (publicUserId && !/^[A-Za-z0-9_-]{3,64}$/.test(publicUserId)) {
+      setClientError('Public User ID must be 3–64 characters and may contain only letters, numbers, underscore (_) and hyphen (-).');
+      return;
+    }
+    if (form.password.length < 12) {
+      setClientError('Temporary password must be at least 12 characters.');
+      return;
+    }
+    mutation.mutate();
+  }
   return <div className="modal-backdrop" onMouseDown={e => { if (e.currentTarget === e.target) onClose(); }}><form className="modal" onSubmit={submit}>
     <div className="panel-title"><h2>Create user</h2><button type="button" className="icon-btn" onClick={onClose}>×</button></div>
-    <label>Public User ID <input value={form.publicUserId} onChange={e => setForm(v => ({...v, publicUserId:e.target.value}))} placeholder="optional – generated if blank" /></label>
+    <label>Public User ID <input value={form.publicUserId} onChange={e => setForm(v => ({...v, publicUserId:e.target.value}))} placeholder="optional – generated if blank" pattern="[A-Za-z0-9_-]{3,64}" title="3–64 characters: letters, numbers, underscore or hyphen" /></label>
     <label>Email <input type="email" value={form.email} onChange={e => setForm(v => ({...v, email:e.target.value}))} required /></label>
-    <label>Temporary password <input type="password" minLength={10} value={form.password} onChange={e => setForm(v => ({...v, password:e.target.value}))} required /></label>
+    <label>Temporary password <input type="password" minLength={12} maxLength={200} value={form.password} onChange={e => setForm(v => ({...v, password:e.target.value}))} required /><small>Minimum 12 characters.</small></label>
     <label>Role <select value={form.role} onChange={e => setForm(v => ({...v, role:e.target.value}))}><option>MAGICIAN</option><option>ADMIN</option></select></label>
+    {clientError && <div className="error">{clientError}</div>}
     {mutation.error && <div className="error">{mutation.error.message}</div>}
     <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={mutation.isPending}>Create</button></div>
   </form></div>;
