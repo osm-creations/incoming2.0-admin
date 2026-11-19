@@ -73,6 +73,10 @@ export const api = {
   user: (id: string) => request<any>(`/api/v1/admin/users/${encodeURIComponent(id)}`),
   createUser: (body: any) => request<any>('/api/v1/admin/users', { method: 'POST', body: JSON.stringify(body) }),
   updateUser: (id: string, body: any) => request<any>(`/api/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  resetPassword: (id: string, password: string) => request<{ updated: boolean }>(
+    `/api/v1/admin/users/${encodeURIComponent(id)}/reset-password`,
+    { method: 'POST', body: JSON.stringify({ password }) }
+  ),
   setEnabled: (id: string, enabled: boolean) => request<any>(`/api/v1/admin/users/${encodeURIComponent(id)}/${enabled ? 'enable' : 'disable'}`, { method: 'POST', body: '{}' }),
   audit: () => request<any>('/api/v1/admin/audit')
 };

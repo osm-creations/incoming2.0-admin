@@ -19,6 +19,7 @@ React + Vite + TypeScript admin console.
 - Create magician/admin account
 - Edit email/public user ID
 - Enable/disable user
+- Reset a user's password from Users → select the user → Security & status → Reset password
 - Audit log
 - Responsive dark Incoming-style UI
 
@@ -57,4 +58,4 @@ Add the deployed admin origin to the backend `ALLOWED_ORIGINS`, e.g.
 - The browser never receives the refresh token in JavaScript; it is HttpOnly.
 - Do not move authentication tokens into localStorage.
 - `VITE_*` values are public browser configuration. Never place secrets in them.
-- Password-reset UI is intentionally not implemented yet; the backend schema is ready for it.
+- Resetting a password signs the user out of their existing sessions.
