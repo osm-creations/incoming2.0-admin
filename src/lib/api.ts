@@ -71,7 +71,10 @@ export const api = {
   dashboard: () => request<any>('/api/v1/admin/dashboard'),
   users: (q = '') => request<any>(`/api/v1/admin/users${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   user: (id: string) => request<any>(`/api/v1/admin/users/${encodeURIComponent(id)}`),
-  createUser: (body: any) => request<any>('/api/v1/admin/users', { method: 'POST', body: JSON.stringify(body) }),
+  createUser: (body: { publicUserId?: string; email: string; password?: string; role: string }) =>
+    request<{ publicUserId: string; email: string; welcomeEmailSent: boolean }>('/api/v1/admin/users', {
+      method: 'POST', body: JSON.stringify(body)
+    }),
   updateUser: (id: string, body: any) => request<any>(`/api/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   resetPassword: (id: string, password: string) => request<{ updated: boolean }>(
     `/api/v1/admin/users/${encodeURIComponent(id)}/reset-password`,

@@ -7,20 +7,22 @@ import { Badge } from './DashboardPage';
 export default function UsersPage() {
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [notice, setNotice] = useState('');
   const q = useQuery({ queryKey: ['users', search], queryFn: () => api.users(search) });
   return <>
-    <header className="page-head"><div><span className="eyebrow">Accounts</span><h1>Users</h1></div><button className="primary compact" onClick={() => setShowCreate(true)}>Create user</button></header>
+    <header className="page-head"><div><span className="eyebrow">Accounts</span><h1>Users</h1></div><button className="primary compact" onClick={() => { setNotice(''); setShowCreate(true); }}>Create user</button></header>
+    {notice && <p role="status">{notice}</p>}
     <section className="panel">
       <div className="toolbar"><input className="search" placeholder="Search user ID or email" value={search} onChange={e => setSearch(e.target.value)} /></div>
       {q.error ? <div className="error">{q.error.message}</div> : <div className="table-wrap"><table><thead><tr><th>User ID</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th></tr></thead><tbody>
         {q.data?.users.map((u: any) => <tr key={u.id}><td><Link to={`/users/${u.id}`}>{u.public_user_id}</Link></td><td>{u.email}</td><td>{u.role}</td><td><Badge value={u.status}/></td><td>{new Date(u.created_at).toLocaleDateString()}</td></tr>)}
       </tbody></table></div>}
     </section>
-    {showCreate && <CreateUser onClose={() => setShowCreate(false)} />}
+    {showCreate && <CreateUser onClose={() => setShowCreate(false)} onCreated={setNotice} />}
   </>;
 }
 
-function CreateUser({ onClose }: { onClose(): void }) {
+function CreateUser({ onClose, onCreated }: { onClose(): void; onCreated(message: string): void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({ publicUserId: '', email: '', password: '', role: 'MAGICIAN' });
   const [clientError, setClientError] = useState('');
@@ -28,10 +30,16 @@ function CreateUser({ onClose }: { onClose(): void }) {
     mutationFn: () => api.createUser({
       publicUserId: form.publicUserId.trim() || undefined,
       email: form.email.trim(),
-      password: form.password,
+      password: form.password || undefined,
       role: form.role
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['users'] }); onClose(); }
+    onSuccess: result => {
+      qc.invalidateQueries({ queryKey: ['users'] });
+      onCreated(result.welcomeEmailSent
+        ? `Created ${result.publicUserId}. Welcome email sent to ${result.email}.`
+        : `Created ${result.publicUserId}. Welcome email delivery was not confirmed. Check the mail settings, then use Forgot password with ${result.email}.`);
+      onClose();
+    }
   });
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -41,20 +49,20 @@ function CreateUser({ onClose }: { onClose(): void }) {
       setClientError('Public User ID must be 3–64 characters and may contain only letters, numbers, underscore (_) and hyphen (-).');
       return;
     }
-    if (form.password.length < 12) {
+    if (form.password && form.password.length < 12) {
       setClientError('Temporary password must be at least 12 characters.');
       return;
     }
     mutation.mutate();
   }
-  return <div className="modal-backdrop" onMouseDown={e => { if (e.currentTarget === e.target) onClose(); }}><form className="modal" onSubmit={submit}>
-    <div className="panel-title"><h2>Create user</h2><button type="button" className="icon-btn" onClick={onClose}>×</button></div>
+  return <div className="modal-backdrop" onMouseDown={e => { if (e.currentTarget === e.target && !mutation.isPending) onClose(); }}><form className="modal" onSubmit={submit}>
+    <div className="panel-title"><h2>Create user</h2><button type="button" className="icon-btn" disabled={mutation.isPending} onClick={onClose}>×</button></div>
     <label>Public User ID <input value={form.publicUserId} onChange={e => setForm(v => ({...v, publicUserId:e.target.value}))} placeholder="optional – generated if blank" pattern="[A-Za-z0-9_-]{3,64}" title="3–64 characters: letters, numbers, underscore or hyphen" /></label>
     <label>Email <input type="email" value={form.email} onChange={e => setForm(v => ({...v, email:e.target.value}))} required /></label>
-    <label>Temporary password <input type="password" minLength={12} maxLength={200} value={form.password} onChange={e => setForm(v => ({...v, password:e.target.value}))} required /><small>Minimum 12 characters.</small></label>
+    <label>Temporary password (optional) <input type="password" autoComplete="new-password" minLength={12} maxLength={200} value={form.password} onChange={e => setForm(v => ({...v, password:e.target.value}))} /><small>Leave blank to generate one. The welcome email includes the user ID, temporary password, and a 7-day setup link.</small></label>
     <label>Role <select value={form.role} onChange={e => setForm(v => ({...v, role:e.target.value}))}><option>MAGICIAN</option><option>ADMIN</option></select></label>
     {clientError && <div className="error">{clientError}</div>}
     {mutation.error && <div className="error">{mutation.error.message}</div>}
-    <div className="modal-actions"><button type="button" className="ghost" onClick={onClose}>Cancel</button><button className="primary" disabled={mutation.isPending}>Create</button></div>
+    <div className="modal-actions"><button type="button" className="ghost" disabled={mutation.isPending} onClick={onClose}>Cancel</button><button className="primary" disabled={mutation.isPending}>{mutation.isPending ? 'Creating…' : 'Create'}</button></div>
   </form></div>;
 }
